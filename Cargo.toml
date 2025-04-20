@@ -36,7 +36,19 @@ futures = "0.3"
 
 parking_lot = "0.12"
 
-revm = { version = "14", features = ["std", "serde"] }
+#revm = { version = "14", default-features = false, features = [
+#    "std",
+#    "serde",
+#] }
+#revm = { git = "https://github.com/taikoxyz/revm.git", branch = "v43-gwyneth", default-features = false, features = [
+#    "std",
+#    "serde",
+#] }
+revm = { path = "../../revm-gwyneth/revm/crates/revm", default-features = false, features = [
+    "std",
+    "serde",
+] }
+
 rustc-hash = "2.0"
 
 serde = "1.0"
@@ -51,3 +63,6 @@ url = "2"
 [dev-dependencies]
 alloy-rpc-client = "0.3"
 alloy-transport-http = "0.3"
+
+#[patch.crates-io]
+#revm = { git = "https://github.com/taikoxyz/revm.git", branch = "v43-gwyneth" }
