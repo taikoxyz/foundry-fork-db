@@ -40,14 +40,14 @@ parking_lot = "0.12"
 #    "std",
 #    "serde",
 #] }
-#revm = { git = "https://github.com/taikoxyz/revm.git", branch = "v43-gwyneth", default-features = false, features = [
-#    "std",
-#    "serde",
-#] }
-revm = { path = "../../revm-gwyneth/revm/crates/revm", default-features = false, features = [
+revm = { git = "https://github.com/taikoxyz/revm-private.git", branch = "v43-gwyneth", default-features = false, features = [
     "std",
     "serde",
 ] }
+#revm = { path = "../../revm-gwyneth/revm/crates/revm", default-features = false, features = [
+#    "std",
+#    "serde",
+#] }
 
 rustc-hash = "2.0"
 
