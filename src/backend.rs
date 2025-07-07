@@ -966,7 +966,7 @@ impl DatabaseRef for SharedBackend {
         })
     }
 
-    fn code_by_hash_ref(&self, hash: B256) -> Result<Bytecode, Self::Error> {
+    fn code_by_hash_ref(&self, chain_id: u64, hash: B256) -> Result<Bytecode, Self::Error> {
         Err(DatabaseError::MissingCode(hash))
     }
 
@@ -981,7 +981,7 @@ impl DatabaseRef for SharedBackend {
         })
     }
 
-    fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
+    fn block_hash_ref(&self, chain_id: u64, number: u64) -> Result<B256, Self::Error> {
         trace!(target: "sharedbackend", "request block hash for number {:?}", number);
         self.do_get_block_hash(number).map_err(|err| {
             error!(target: "sharedbackend", %err, %number, "Failed to send/recv `block_hash`");
