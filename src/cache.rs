@@ -2,7 +2,7 @@
 use alloy_primitives::{Address, B256, U256};
 use parking_lot::RwLock;
 use revm::{
-    primitives::{Account, AccountInfo, AccountStatus, HashMap as Map, KECCAK_EMPTY},
+    primitives::{Account, AccountInfo, AccountStatus, ChainAddress, HashMap as Map, KECCAK_EMPTY},
     DatabaseCommit,
 };
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
@@ -84,17 +84,17 @@ impl BlockchainDb {
     }
 
     /// Returns the map that holds the account related info
-    pub fn accounts(&self) -> &RwLock<Map<Address, AccountInfo>> {
+    pub fn accounts(&self) -> &RwLock<Map<ChainAddress, AccountInfo>> {
         &self.db.accounts
     }
 
     /// Returns the map that holds the storage related info
-    pub fn storage(&self) -> &RwLock<Map<Address, StorageInfo>> {
+    pub fn storage(&self) -> &RwLock<Map<ChainAddress, StorageInfo>> {
         &self.db.storage
     }
 
     /// Returns the map that holds all the block hashes
-    pub fn block_hashes(&self) -> &RwLock<Map<U256, B256>> {
+    pub fn block_hashes(&self) -> &RwLock<Map<(u64, U256), B256>> {
         &self.db.block_hashes
     }
 
@@ -248,11 +248,11 @@ impl<'de> Deserialize<'de> for BlockchainDbMeta {
 #[derive(Debug, Default)]
 pub struct MemDb {
     /// Account related data
-    pub accounts: RwLock<Map<Address, AccountInfo>>,
+    pub accounts: RwLock<Map<ChainAddress, AccountInfo>>,
     /// Storage related data
-    pub storage: RwLock<Map<Address, StorageInfo>>,
+    pub storage: RwLock<Map<ChainAddress, StorageInfo>>,
     /// All retrieved block hashes
-    pub block_hashes: RwLock<Map<U256, B256>>,
+    pub block_hashes: RwLock<Map<(u64, U256), B256>>,
 }
 
 impl MemDb {
@@ -264,12 +264,12 @@ impl MemDb {
     }
 
     // Inserts the account, replacing it if it exists already
-    pub fn do_insert_account(&self, address: Address, account: AccountInfo) {
+    pub fn do_insert_account(&self, address: ChainAddress, account: AccountInfo) {
         self.accounts.write().insert(address, account);
     }
 
     /// The implementation of [DatabaseCommit::commit()]
-    pub fn do_commit(&self, changes: Map<Address, Account>) {
+    pub fn do_commit(&self, changes: Map<ChainAddress, Account>) {
         let mut storage = self.storage.write();
         let mut accounts = self.accounts.write();
         for (add, mut acc) in changes {
@@ -321,7 +321,7 @@ impl Clone for MemDb {
 }
 
 impl DatabaseCommit for MemDb {
-    fn commit(&mut self, changes: Map<Address, Account>) {
+    fn commit(&mut self, changes: Map<ChainAddress, Account>) {
         self.do_commit(changes)
     }
 }
@@ -446,9 +446,9 @@ impl<'de> Deserialize<'de> for JsonBlockCacheData {
         #[derive(Deserialize)]
         struct Data {
             meta: BlockchainDbMeta,
-            accounts: HashMap<Address, AccountInfo>,
-            storage: HashMap<Address, HashMap<U256, U256>>,
-            block_hashes: HashMap<U256, B256>,
+            accounts: HashMap<ChainAddress, AccountInfo>,
+            storage: HashMap<ChainAddress, HashMap<U256, U256>>,
+            block_hashes: HashMap<(u64, U256), B256>,
         }
 
         let Data { meta, accounts, storage, block_hashes } = Data::deserialize(deserializer)?;
