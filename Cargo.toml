@@ -25,7 +25,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-alloy-primitives = { version = "1.1.2", features = ["map"], default-features = false }
+alloy-primitives = { version = "1.2.1", features = ["map"], default-features = false }
 alloy-provider = { version = "1.0.6", default-features = false }
 alloy-rpc-types = { version = "1.0.6", features = ["eth"] }
 alloy-consensus = { version = "1.0.6", default-features = false }
@@ -55,7 +55,7 @@ alloy-rpc-client = "1.0.3"
 tiny_http = "0.12"
 
 [patch.crates-io]
-alloy-primitives = { git = "https://github.com/taikoxyz/alloy-core.git", branch = "gwyneth" }
+alloy-primitives = { git = "https://github.com/taikoxyz/alloy-core.git", branch = "v1.2.1-gwyneth" }
 # foldhash = { version = "0.1.5", default-features = false }
 # alloy-provider = { git = "https://github.com/alloy-rs/alloy", rev = "a4e7099" }
 # alloy-rpc-types = { git = "https://github.com/alloy-rs/alloy", rev = "a4e7099" }
