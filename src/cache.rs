@@ -4,6 +4,7 @@ use alloy_primitives::{Address, B256, U256};
 use alloy_provider::network::TransactionResponse;
 use parking_lot::RwLock;
 use revm::{
+    bytecode::bitvec::view::BitViewSized,
     context::BlockEnv,
     context_interface::block::BlobExcessGasAndPrice,
     primitives::{
@@ -148,16 +149,16 @@ impl BlockchainDbMeta {
         block: &alloy_rpc_types::Block<T, H>,
     ) -> Self {
         self.block_env = BlockEnv {
-            number: U256::from(block.header.number()),
+            number: block.header.number(),
             beneficiary: block.header.beneficiary(),
-            timestamp: U256::from(block.header.timestamp()),
+            timestamp: block.header.timestamp(),
             difficulty: U256::from(block.header.difficulty()),
             basefee: block.header.base_fee_per_gas().unwrap_or_default(),
             gas_limit: block.header.gas_limit(),
             prevrandao: block.header.mix_hash(),
             blob_excess_gas_and_price: Some(BlobExcessGasAndPrice::new(
                 block.header.excess_blob_gas().unwrap_or_default(),
-                1,
+                true,
             )),
         };
 
