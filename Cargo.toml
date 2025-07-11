@@ -34,7 +34,7 @@ eyre = "0.6"
 futures = "0.3"
 
 parking_lot = "0.12"
-revm = { git = "https://github.com/taikoxyz/revm-private.git", branch = "explicit_hasmpa", default-features = false, features = [
+revm = { git = "https://github.com/taikoxyz/revm-private.git", branch = "dani/gwyneth-v5-no-prefix", default-features = false, features = [
     "std",
     "serde",
 ] }
