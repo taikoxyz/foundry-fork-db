@@ -29,6 +29,8 @@ alloy-primitives = { version = "1.2.1", features = ["map"], default-features = f
 alloy-provider = { version = "1.0.6", default-features = false }
 alloy-rpc-types = { version = "1.0.6", features = ["eth"] }
 alloy-consensus = { version = "1.0.6", default-features = false }
+alloy-transport = { version = "1.0.2", default-features = false }
+
 foldhash = "0.1.5"
 eyre = "0.6"
 futures = "0.3"
@@ -52,6 +54,7 @@ url = "2"
 
 [dev-dependencies]
 alloy-rpc-client = "1.0.3"
+alloy-transport = "1.0.2"
 tiny_http = "0.12"
 
 [patch.crates-io]
