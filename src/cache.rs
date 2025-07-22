@@ -4,6 +4,7 @@ use alloy_primitives::{Address, B256, U256};
 use alloy_provider::network::TransactionResponse;
 use parking_lot::RwLock;
 use revm::{
+    bytecode::bitvec::view::BitViewSized,
     context::BlockEnv,
     context_interface::block::BlobExcessGasAndPrice,
     primitives::{
@@ -102,7 +103,7 @@ impl BlockchainDb {
     }
 
     /// Returns the map that holds all the block hashes
-    pub fn block_hashes(&self) -> &RwLock<HashMap<U256, B256>> {
+    pub fn block_hashes(&self) -> &RwLock<HashMap<(u64, U256), B256>> {
         &self.db.block_hashes
     }
 
@@ -157,7 +158,7 @@ impl BlockchainDbMeta {
             prevrandao: block.header.mix_hash(),
             blob_excess_gas_and_price: Some(BlobExcessGasAndPrice::new(
                 block.header.excess_blob_gas().unwrap_or_default(),
-                false,
+                true,
             )),
         };
 
@@ -262,7 +263,7 @@ pub struct MemDb {
     /// Storage related data
     pub storage: RwLock<AddressHashMap<StorageInfo>>,
     /// All retrieved block hashes
-    pub block_hashes: RwLock<HashMap<U256, B256>>,
+    pub block_hashes: RwLock<HashMap<(u64, U256), B256>>,
 }
 
 impl MemDb {
@@ -464,7 +465,7 @@ impl<'de> Deserialize<'de> for JsonBlockCacheData {
             meta: BlockchainDbMeta,
             accounts: AddressHashMap<AccountInfo>,
             storage: AddressHashMap<HashMap<U256, U256>>,
-            block_hashes: HashMap<U256, B256>,
+            block_hashes: HashMap<(u64, U256), B256>,
         }
 
         let Data { meta, accounts, storage, block_hashes } = Data::deserialize(deserializer)?;
