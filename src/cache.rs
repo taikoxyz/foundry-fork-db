@@ -131,7 +131,7 @@ impl BlockchainDbMeta {
             .and_then(|url| url.host().map(|host| host.to_string()))
             .unwrap_or(url);
 
-        Self { cfg_env: env.cfg.clone(), block_env: env.block, hosts: BTreeSet::from([host]) }
+        Self { cfg_env: env.cfg.clone(), block_env: env.blocks.get(&env.cfg.chain_id).unwrap().clone(), hosts: BTreeSet::from([host]) }
     }
 }
 
