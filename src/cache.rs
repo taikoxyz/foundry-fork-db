@@ -10,7 +10,7 @@ use revm::{
         map::{AddressHashMap, HashMap},
         KECCAK_EMPTY,
     },
-    state::{Account, AccountInfo, AccountStatus},
+    state::{Account, AccountInfo, AccountStatus, Bytecode},
     DatabaseCommit,
 };
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
@@ -102,7 +102,7 @@ impl BlockchainDb {
     }
 
     /// Returns the map that holds all the block hashes
-    pub fn block_hashes(&self) -> &RwLock<HashMap<U256, B256>> {
+    pub fn block_hashes(&self) -> &RwLock<HashMap<(u64, U256), B256>> {
         &self.db.block_hashes
     }
 
@@ -262,7 +262,11 @@ pub struct MemDb {
     /// Storage related data
     pub storage: RwLock<AddressHashMap<StorageInfo>>,
     /// All retrieved block hashes
-    pub block_hashes: RwLock<HashMap<U256, B256>>,
+    pub block_hashes: RwLock<HashMap<(u64, U256), B256>>,
+    /// Code cache by (chain_id, code_hash)
+    pub contracts: RwLock<HashMap<(u64, B256), Bytecode>>,
+    /// Default contracts cache (chain-agnostic)
+    pub default_contracts: RwLock<HashMap<B256, Bytecode>>,
 }
 
 impl MemDb {
@@ -271,6 +275,8 @@ impl MemDb {
         self.accounts.write().clear();
         self.storage.write().clear();
         self.block_hashes.write().clear();
+        self.contracts.write().clear();
+        self.default_contracts.write().clear();
     }
 
     // Inserts the account, replacing it if it exists already
@@ -326,6 +332,8 @@ impl Clone for MemDb {
             storage: RwLock::new(self.storage.read().clone()),
             accounts: RwLock::new(self.accounts.read().clone()),
             block_hashes: RwLock::new(self.block_hashes.read().clone()),
+            contracts: RwLock::new(self.contracts.read().clone()),
+            default_contracts: RwLock::new(self.default_contracts.read().clone()),
         }
     }
 }
@@ -443,12 +451,14 @@ impl Serialize for JsonBlockCacheData {
     where
         S: Serializer,
     {
-        let mut map = serializer.serialize_map(Some(4))?;
+        let mut map = serializer.serialize_map(Some(6))?;
 
         map.serialize_entry("meta", &self.meta.read().clone())?;
         map.serialize_entry("accounts", &self.data.accounts.read().clone())?;
         map.serialize_entry("storage", &self.data.storage.read().clone())?;
         map.serialize_entry("block_hashes", &self.data.block_hashes.read().clone())?;
+        map.serialize_entry("contracts", &self.data.contracts.read().clone())?;
+        map.serialize_entry("default_contracts", &self.data.default_contracts.read().clone())?;
 
         map.end()
     }
@@ -464,10 +474,15 @@ impl<'de> Deserialize<'de> for JsonBlockCacheData {
             meta: BlockchainDbMeta,
             accounts: AddressHashMap<AccountInfo>,
             storage: AddressHashMap<HashMap<U256, U256>>,
-            block_hashes: HashMap<U256, B256>,
+            block_hashes: HashMap<(u64, U256), B256>,
+            #[serde(default)]
+            contracts: HashMap<(u64, B256), Bytecode>,
+            #[serde(default)]
+            default_contracts: HashMap<B256, Bytecode>,
         }
 
-        let Data { meta, accounts, storage, block_hashes } = Data::deserialize(deserializer)?;
+        let Data { meta, accounts, storage, block_hashes, contracts, default_contracts } =
+            Data::deserialize(deserializer)?;
 
         Ok(Self {
             meta: Arc::new(RwLock::new(meta)),
@@ -475,6 +490,8 @@ impl<'de> Deserialize<'de> for JsonBlockCacheData {
                 accounts: RwLock::new(accounts),
                 storage: RwLock::new(storage),
                 block_hashes: RwLock::new(block_hashes),
+                contracts: RwLock::new(contracts),
+                default_contracts: RwLock::new(default_contracts),
             }),
         })
     }
