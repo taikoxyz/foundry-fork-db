@@ -21,7 +21,7 @@ use futures::{
 use revm::{
     database::DatabaseRef,
     primitives::{
-        map::{hash_map::Entry, AddressHashMap, HashMap},
+        map::{hash_map::Entry, HashMap},
         KECCAK_EMPTY,
     },
     state::{AccountInfo, Bytecode},
@@ -50,7 +50,7 @@ supported. Please try to change your RPC url to an archive node if the issue per
 type AccountFuture<Err> =
     Pin<Box<dyn Future<Output = (Result<(U256, u64, Bytes), Err>, Address)> + Send>>;
 type StorageFuture<Err> = Pin<Box<dyn Future<Output = (Result<U256, Err>, Address, U256)> + Send>>;
-type BlockHashFuture<Err> = Pin<Box<dyn Future<Output = (Result<B256, Err>, u64)> + Send>>;
+type BlockHashFuture<Err> = Pin<Box<dyn Future<Output = (Result<B256, Err>, u64, u64)> + Send>>;
 type FullBlockFuture<Err> = Pin<
     Box<dyn Future<Output = (FullBlockSender, Result<Option<AnyRpcBlock>, Err>, BlockId)> + Send>,
 >;
@@ -63,9 +63,9 @@ type BlockHashSender = OneshotSender<DatabaseResult<B256>>;
 type FullBlockSender = OneshotSender<DatabaseResult<AnyRpcBlock>>;
 type TransactionSender = OneshotSender<DatabaseResult<AnyRpcTransaction>>;
 
-type AddressData = AddressHashMap<AccountInfo>;
-type StorageData = AddressHashMap<StorageInfo>;
-type BlockHashData = HashMap<U256, B256>;
+type AddressData = HashMap<(u64, Address), AccountInfo>;
+type StorageData = HashMap<(u64, Address), StorageInfo>;
+type BlockHashData = HashMap<(u64, U256), B256>;
 
 /// States for tracking which account endpoints should be used when account info
 const ACCOUNT_FETCH_UNCHECKED: u8 = 0;
@@ -132,11 +132,11 @@ enum BackendRequest {
     /// Fetch a storage slot
     Storage(Address, U256, StorageSender),
     /// Fetch a block hash
-    BlockHash(u64, BlockHashSender),
+    BlockHash(u64, u64, BlockHashSender),
     /// Fetch an entire block with transactions
-    FullBlock(BlockId, FullBlockSender),
+    FullBlock(u64, BlockId, FullBlockSender),
     /// Fetch a transaction
-    Transaction(B256, TransactionSender),
+    Transaction(u64, B256, TransactionSender),
     /// Sets the pinned block to fetch data from
     SetPinnedBlock(BlockId),
 
@@ -212,31 +212,31 @@ where
         match req {
             BackendRequest::Basic(addr, sender) => {
                 trace!(target: "backendhandler", "received request basic address={:?}", addr);
-                let acc = self.db.accounts().read().get(&addr).cloned();
+                let acc = self.db.accounts().read().get(&(addr.chain_id(), addr)).cloned();
                 if let Some(basic) = acc {
                     let _ = sender.send(Ok(basic));
                 } else {
                     self.request_account(addr, sender);
                 }
             }
-            BackendRequest::BlockHash(number, sender) => {
-                let hash = self.db.block_hashes().read().get(&U256::from(number)).cloned();
+            BackendRequest::BlockHash(chain_id, number, sender) => {
+                let hash = self.db.block_hashes().read().get(&(chain_id, U256::from(number))).cloned();
                 if let Some(hash) = hash {
                     let _ = sender.send(Ok(hash));
                 } else {
-                    self.request_hash(number, sender);
+                    self.request_hash(chain_id, number, sender);
                 }
             }
-            BackendRequest::FullBlock(number, sender) => {
-                self.request_full_block(number, sender);
+            BackendRequest::FullBlock(chain_id, number, sender) => {
+                self.request_full_block(chain_id, number, sender);
             }
-            BackendRequest::Transaction(tx, sender) => {
-                self.request_transaction(tx, sender);
+            BackendRequest::Transaction(chain_id, tx, sender) => {
+                self.request_transaction(chain_id, tx, sender);
             }
             BackendRequest::Storage(addr, idx, sender) => {
                 // account is already stored in the cache
                 let value =
-                    self.db.storage().read().get(&addr).and_then(|acc| acc.get(&idx).copied());
+                    self.db.storage().read().get(&(addr.chain_id(), addr)).and_then(|acc| acc.get(&idx).copied());
                 if let Some(value) = value {
                     let _ = sender.send(Ok(value));
                 } else {
@@ -280,6 +280,11 @@ where
                 let provider = self.provider.clone();
                 let block_id = self.block_id.unwrap_or_default();
                 let fut = Box::pin(async move {
+                    let _result: std::result::Result<bool, eyre::Report> = provider
+                        .client()
+                        .request("eth_setActiveChainId", (address.chain_id(),))
+                        .await
+                        .map_err(Into::into);
                     let storage = provider
                         .get_storage_at(address, idx)
                         .block_id(block_id)
@@ -300,6 +305,11 @@ where
         let block_id = self.block_id.unwrap_or_default();
         let mode = Arc::clone(&self.account_fetch_mode);
         let fut = async move {
+            let _result: std::result::Result<bool, eyre::Report> = provider
+                .client()
+                .request("eth_setActiveChainId", (address.chain_id(),))
+                .await
+                .map_err(Into::into);
             // depending on the tracked mode we can dispatch requests.
             let initial_mode = mode.load(Ordering::Relaxed);
             match initial_mode {
@@ -405,9 +415,14 @@ where
     }
 
     /// process a request for an entire block
-    fn request_full_block(&mut self, number: BlockId, sender: FullBlockSender) {
+    fn request_full_block(&mut self, chain_id: u64, number: BlockId, sender: FullBlockSender) {
         let provider = self.provider.clone();
         let fut = Box::pin(async move {
+            let _result: std::result::Result<bool, eyre::Report> = provider
+                .client()
+                .request("eth_setActiveChainId", (chain_id,))
+                .await
+                .map_err(Into::into);
             let block = provider
                 .get_block(number)
                 .full()
@@ -420,9 +435,14 @@ where
     }
 
     /// process a request for a transactions
-    fn request_transaction(&mut self, tx: B256, sender: TransactionSender) {
+    fn request_transaction(&mut self, chain_id: u64, tx: B256, sender: TransactionSender) {
         let provider = self.provider.clone();
         let fut = Box::pin(async move {
+            let _result: std::result::Result<bool, eyre::Report> = provider
+                .client()
+                .request("eth_setActiveChainId", (chain_id,))
+                .await
+                .map_err(Into::into);
             let block = provider
                 .get_transaction_by_hash(tx)
                 .await
@@ -437,7 +457,7 @@ where
     }
 
     /// process a request for a block hash
-    fn request_hash(&mut self, number: u64, listener: BlockHashSender) {
+    fn request_hash(&mut self, chain_id: u64, number: u64, listener: BlockHashSender) {
         match self.block_requests.entry(number) {
             Entry::Occupied(mut entry) => {
                 entry.get_mut().push(listener);
@@ -447,6 +467,11 @@ where
                 entry.insert(vec![listener]);
                 let provider = self.provider.clone();
                 let fut = Box::pin(async move {
+                    let _result: std::result::Result<bool, eyre::Report> = provider
+                        .client()
+                        .request("eth_setActiveChainId", (chain_id,))
+                        .await
+                        .map_err(Into::into);
                     let block = provider
                         .get_block_by_number(number.into())
                         .hashes()
@@ -466,7 +491,7 @@ where
                             Err(err)
                         }
                     };
-                    (block_hash, number)
+                    (block_hash, chain_id, number)
                 });
                 self.pending_requests.push(ProviderRequest::BlockHash(fut));
             }
@@ -539,7 +564,7 @@ where
                                 code: Some(Bytecode::new_raw(code)),
                                 code_hash,
                             };
-                            pin.db.accounts().write().insert(addr, acc.clone());
+                            pin.db.accounts().write().insert((addr.chain_id(), addr), acc.clone());
 
                             // notify all listeners
                             if let Some(listeners) = pin.account_requests.remove(&addr) {
@@ -573,7 +598,7 @@ where
                             };
 
                             // update the cache
-                            pin.db.storage().write().entry(addr).or_default().insert(idx, value);
+                            pin.db.storage().write().entry((addr.chain_id(), addr)).or_default().insert(idx, value);
 
                             // notify all listeners
                             if let Some(listeners) = pin.storage_requests.remove(&(addr, idx)) {
@@ -585,7 +610,7 @@ where
                         }
                     }
                     ProviderRequest::BlockHash(fut) => {
-                        if let Poll::Ready((block_hash, number)) = fut.poll_unpin(cx) {
+                        if let Poll::Ready((block_hash, chain_id, number)) = fut.poll_unpin(cx) {
                             let value = match block_hash {
                                 Ok(value) => value,
                                 Err(err) => {
@@ -604,7 +629,7 @@ where
                             };
 
                             // update the cache
-                            pin.db.block_hashes().write().insert(U256::from(number), value);
+                            pin.db.block_hashes().write().insert((chain_id, U256::from(number)), value);
 
                             // notify all listeners
                             if let Some(listeners) = pin.block_requests.remove(&number) {
@@ -807,20 +832,20 @@ impl SharedBackend {
     }
 
     /// Returns the full block for the given block identifier
-    pub fn get_full_block(&self, block: impl Into<BlockId>) -> DatabaseResult<AnyRpcBlock> {
+    pub fn get_full_block(&self, chain_id: u64, block: impl Into<BlockId>) -> DatabaseResult<AnyRpcBlock> {
         self.blocking_mode.run(|| {
             let (sender, rx) = oneshot_channel();
-            let req = BackendRequest::FullBlock(block.into(), sender);
+            let req = BackendRequest::FullBlock(chain_id, block.into(), sender);
             self.backend.unbounded_send(req)?;
             rx.recv()?
         })
     }
 
     /// Returns the transaction for the hash
-    pub fn get_transaction(&self, tx: B256) -> DatabaseResult<AnyRpcTransaction> {
+    pub fn get_transaction(&self, chain_id: u64, tx: B256) -> DatabaseResult<AnyRpcTransaction> {
         self.blocking_mode.run(|| {
             let (sender, rx) = oneshot_channel();
-            let req = BackendRequest::Transaction(tx, sender);
+            let req = BackendRequest::Transaction(chain_id, tx, sender);
             self.backend.unbounded_send(req)?;
             rx.recv()?
         })
@@ -844,10 +869,10 @@ impl SharedBackend {
         })
     }
 
-    fn do_get_block_hash(&self, number: u64) -> DatabaseResult<B256> {
+    fn do_get_block_hash(&self, chain_id: u64, number: u64) -> DatabaseResult<B256> {
         self.blocking_mode.run(|| {
             let (sender, rx) = oneshot_channel();
-            let req = BackendRequest::BlockHash(number, sender);
+            let req = BackendRequest::BlockHash(chain_id, number, sender);
             self.backend.unbounded_send(req)?;
             rx.recv()?
         })
@@ -983,7 +1008,9 @@ impl DatabaseRef for SharedBackend {
 
     fn block_hash_ref(&self, number: u64) -> Result<B256, Self::Error> {
         trace!(target: "sharedbackend", "request block hash for number {:?}", number);
-        self.do_get_block_hash(number).map_err(|err| {
+        // Default to mainnet (chain_id = 1) for DatabaseRef trait compatibility
+        const DEFAULT_CHAIN_ID: u64 = 1;
+        self.do_get_block_hash(DEFAULT_CHAIN_ID, number).map_err(|err| {
             error!(target: "sharedbackend", %err, %number, "Failed to send/recv `block_hash`");
             if err.is_possibly_non_archive_node_error() {
                 error!(target: "sharedbackend", "{NON_ARCHIVE_NODE_WARNING}");
@@ -1227,7 +1254,7 @@ mod tests {
         let handle = std::thread::spawn(move || {
             for i in 1..max_slots {
                 let key = U256::from(i);
-                let result_hash = backend.do_get_block_hash(i);
+                let result_hash = backend.do_get_block_hash(1, i); // Use mainnet chain_id for test
                 match result_hash {
                     Ok(hash) => {
                         assert_eq!(
@@ -1238,7 +1265,7 @@ mod tests {
 
                         let db_result = {
                             let hashes = db.block_hashes().read();
-                            *hashes.get(&key).unwrap()
+                            *hashes.get(&(1, key)).unwrap()
                         };
 
                         assert_eq!(hash, db_result, "The hash in block {key} did not match");

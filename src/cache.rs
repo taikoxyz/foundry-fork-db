@@ -7,7 +7,7 @@ use revm::{
     context::BlockEnv,
     context_interface::block::BlobExcessGasAndPrice,
     primitives::{
-        map::{AddressHashMap, HashMap},
+        map::HashMap,
         KECCAK_EMPTY,
     },
     state::{Account, AccountInfo, AccountStatus},
@@ -92,17 +92,17 @@ impl BlockchainDb {
     }
 
     /// Returns the map that holds the account related info
-    pub fn accounts(&self) -> &RwLock<AddressHashMap<AccountInfo>> {
+    pub fn accounts(&self) -> &RwLock<HashMap<(u64, Address), AccountInfo>> {
         &self.db.accounts
     }
 
     /// Returns the map that holds the storage related info
-    pub fn storage(&self) -> &RwLock<AddressHashMap<StorageInfo>> {
+    pub fn storage(&self) -> &RwLock<HashMap<(u64, Address), StorageInfo>> {
         &self.db.storage
     }
 
     /// Returns the map that holds all the block hashes
-    pub fn block_hashes(&self) -> &RwLock<HashMap<U256, B256>> {
+    pub fn block_hashes(&self) -> &RwLock<HashMap<(u64, U256), B256>> {
         &self.db.block_hashes
     }
 
@@ -258,11 +258,11 @@ impl<'de> Deserialize<'de> for BlockchainDbMeta {
 #[derive(Debug, Default)]
 pub struct MemDb {
     /// Account related data
-    pub accounts: RwLock<AddressHashMap<AccountInfo>>,
+    pub accounts: RwLock<HashMap<(u64, Address), AccountInfo>>,
     /// Storage related data
-    pub storage: RwLock<AddressHashMap<StorageInfo>>,
+    pub storage: RwLock<HashMap<(u64, Address), StorageInfo>>,
     /// All retrieved block hashes
-    pub block_hashes: RwLock<HashMap<U256, B256>>,
+    pub block_hashes: RwLock<HashMap<(u64, U256), B256>>,
 }
 
 impl MemDb {
@@ -275,7 +275,7 @@ impl MemDb {
 
     // Inserts the account, replacing it if it exists already
     pub fn do_insert_account(&self, address: Address, account: AccountInfo) {
-        self.accounts.write().insert(address, account);
+        self.accounts.write().insert((address.chain_id(), address), account);
     }
 
     /// The implementation of [DatabaseCommit::commit()]
@@ -284,8 +284,8 @@ impl MemDb {
         let mut accounts = self.accounts.write();
         for (add, mut acc) in changes {
             if acc.is_empty() || acc.is_selfdestructed() {
-                accounts.remove(&add);
-                storage.remove(&add);
+                accounts.remove(&(add.chain_id(), add));
+                storage.remove(&(add.chain_id(), add));
             } else {
                 // insert account
                 if let Some(code_hash) = acc
@@ -299,9 +299,9 @@ impl MemDb {
                 } else if acc.info.code_hash.is_zero() {
                     acc.info.code_hash = KECCAK_EMPTY;
                 }
-                accounts.insert(add, acc.info);
+                accounts.insert((add.chain_id(), add), acc.info);
 
-                let acc_storage = storage.entry(add).or_default();
+                let acc_storage = storage.entry((add.chain_id(), add)).or_default();
                 if acc.status.contains(AccountStatus::Created) {
                     acc_storage.clear();
                 }
@@ -313,7 +313,7 @@ impl MemDb {
                     }
                 }
                 if acc_storage.is_empty() {
-                    storage.remove(&add);
+                    storage.remove(&(add.chain_id(), add));
                 }
             }
         }
@@ -462,9 +462,9 @@ impl<'de> Deserialize<'de> for JsonBlockCacheData {
         #[derive(Deserialize)]
         struct Data {
             meta: BlockchainDbMeta,
-            accounts: AddressHashMap<AccountInfo>,
-            storage: AddressHashMap<HashMap<U256, U256>>,
-            block_hashes: HashMap<U256, B256>,
+            accounts: HashMap<(u64, Address), AccountInfo>,
+            storage: HashMap<(u64, Address), HashMap<U256, U256>>,
+            block_hashes: HashMap<(u64, U256), B256>,
         }
 
         let Data { meta, accounts, storage, block_hashes } = Data::deserialize(deserializer)?;
