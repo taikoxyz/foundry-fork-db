@@ -35,7 +35,6 @@ futures = "0.3"
 
 parking_lot = "0.12"
 
-#revm = { path = "../revm-private/crates/revm", features = ["std", "serde"] }
 revm = { git = "https://github.com/taikoxyz/revm-private.git", branch = "v75-gwyneth-claude", features = ["std", "serde"]}
 
 serde = "1.0"
