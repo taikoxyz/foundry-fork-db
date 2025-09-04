@@ -1,14 +1,17 @@
 //! Cache related abstraction
 use alloy_consensus::BlockHeader;
-use alloy_primitives::{B256, U256};
+use alloy_primitives::{Address, B256, U256};
 use alloy_provider::network::TransactionResponse;
 use parking_lot::RwLock;
 use revm::{
     context::BlockEnv,
     context_interface::block::BlobExcessGasAndPrice,
-    database_interface::MultiChainDatabaseCommit,
-    primitives::{map::HashMap, ChainAddress, KECCAK_EMPTY},
+    primitives::{
+        map::{AddressHashMap, HashMap},
+        ChainAddress, KECCAK_EMPTY,
+    },
     state::{Account, AccountInfo, AccountStatus},
+    DatabaseCommit,
 };
 use serde::{ser::SerializeMap, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -89,17 +92,17 @@ impl BlockchainDb {
     }
 
     /// Returns the map that holds the account related info
-    pub fn accounts(&self) -> &RwLock<HashMap<ChainAddress, AccountInfo>> {
+    pub fn accounts(&self) -> &RwLock<AddressHashMap<AccountInfo>> {
         &self.db.accounts
     }
 
     /// Returns the map that holds the storage related info
-    pub fn storage(&self) -> &RwLock<HashMap<ChainAddress, StorageInfo>> {
+    pub fn storage(&self) -> &RwLock<AddressHashMap<StorageInfo>> {
         &self.db.storage
     }
 
     /// Returns the map that holds all the block hashes
-    pub fn block_hashes(&self) -> &RwLock<HashMap<(u64, U256), B256>> {
+    pub fn block_hashes(&self) -> &RwLock<HashMap<U256, B256>> {
         &self.db.block_hashes
     }
 
@@ -147,7 +150,7 @@ impl BlockchainDbMeta {
     ) -> Self {
         self.block_env = BlockEnv {
             number: block.header.number(),
-            beneficiary: ChainAddress::new(chain_id, block.header.beneficiary()),
+            beneficiary: ChainAddress(chain_id, block.header.beneficiary()),
             timestamp: block.header.timestamp(),
             difficulty: U256::from(block.header.difficulty()),
             basefee: block.header.base_fee_per_gas().unwrap_or_default(),
@@ -256,11 +259,11 @@ impl<'de> Deserialize<'de> for BlockchainDbMeta {
 #[derive(Debug, Default)]
 pub struct MemDb {
     /// Account related data
-    pub accounts: RwLock<HashMap<ChainAddress, AccountInfo>>,
+    pub accounts: RwLock<AddressHashMap<AccountInfo>>,
     /// Storage related data
-    pub storage: RwLock<HashMap<ChainAddress, StorageInfo>>,
+    pub storage: RwLock<AddressHashMap<StorageInfo>>,
     /// All retrieved block hashes
-    pub block_hashes: RwLock<HashMap<(u64, U256), B256>>,
+    pub block_hashes: RwLock<HashMap<U256, B256>>,
 }
 
 impl MemDb {
@@ -272,12 +275,12 @@ impl MemDb {
     }
 
     // Inserts the account, replacing it if it exists already
-    pub fn do_insert_account(&self, address: ChainAddress, account: AccountInfo) {
+    pub fn do_insert_account(&self, address: Address, account: AccountInfo) {
         self.accounts.write().insert(address, account);
     }
 
-    /// The implementation of [MultiChainDatabaseCommit::commit_multi()]
-    pub fn do_commit(&self, changes: HashMap<ChainAddress, Account>) {
+    /// The implementation of [DatabaseCommit::commit()]
+    pub fn do_commit(&self, changes: HashMap<Address, Account>) {
         let mut storage = self.storage.write();
         let mut accounts = self.accounts.write();
         for (add, mut acc) in changes {
@@ -328,8 +331,8 @@ impl Clone for MemDb {
     }
 }
 
-impl MultiChainDatabaseCommit for MemDb {
-    fn commit_multi(&mut self, changes: HashMap<ChainAddress, Account>) {
+impl DatabaseCommit for MemDb {
+    fn commit(&mut self, changes: HashMap<Address, Account>) {
         self.do_commit(changes)
     }
 }
@@ -460,9 +463,9 @@ impl<'de> Deserialize<'de> for JsonBlockCacheData {
         #[derive(Deserialize)]
         struct Data {
             meta: BlockchainDbMeta,
-            accounts: HashMap<ChainAddress, AccountInfo>,
-            storage: HashMap<ChainAddress, HashMap<U256, U256>>,
-            block_hashes: HashMap<(u64, U256), B256>,
+            accounts: AddressHashMap<AccountInfo>,
+            storage: AddressHashMap<HashMap<U256, U256>>,
+            block_hashes: HashMap<U256, B256>,
         }
 
         let Data { meta, accounts, storage, block_hashes } = Data::deserialize(deserializer)?;
