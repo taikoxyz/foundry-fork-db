@@ -228,8 +228,8 @@ where
                     self.request_hash(number, sender);
                 }
             }
-            BackendRequest::FullBlock(block_id, sender) => {
-                self.request_full_block(block_id, sender);
+            BackendRequest::FullBlock(number, sender) => {
+                self.request_full_block(number, sender);
             }
             BackendRequest::Transaction(tx, sender) => {
                 self.request_transaction(tx, sender);
@@ -537,7 +537,7 @@ where
                                                 addr,
                                                 Arc::clone(&err),
                                             )));
-                                        });
+                                        })
                                     }
                                     continue;
                                 }
