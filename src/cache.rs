@@ -8,7 +8,7 @@ use revm::{
     context_interface::block::BlobExcessGasAndPrice,
     primitives::{
         map::{AddressHashMap, HashMap},
-        KECCAK_EMPTY,
+        ChainAddress, KECCAK_EMPTY,
     },
     state::{Account, AccountInfo, AccountStatus},
     DatabaseCommit,
@@ -146,10 +146,11 @@ impl BlockchainDbMeta {
     pub fn with_block<T: TransactionResponse, H: BlockHeader>(
         mut self,
         block: &alloy_rpc_types::Block<T, H>,
+        chain_id: u64,
     ) -> Self {
         self.block_env = BlockEnv {
             number: block.header.number(),
-            beneficiary: block.header.beneficiary(),
+            beneficiary: ChainAddress(chain_id, block.header.beneficiary()),
             timestamp: block.header.timestamp(),
             difficulty: U256::from(block.header.difficulty()),
             basefee: block.header.base_fee_per_gas().unwrap_or_default(),
