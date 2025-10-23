@@ -11,7 +11,7 @@ use revm::{
     context_interface::block::BlobExcessGasAndPrice,
     primitives::{
         eip4844::{BLOB_BASE_FEE_UPDATE_FRACTION_CANCUN, BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE},
-        map::{AddressHashMap, HashMap},
+        map::{AddressHashMap, HashMap},ChainAddress,
         KECCAK_EMPTY,
     },
     state::{Account, AccountInfo, AccountStatus},
@@ -153,6 +153,7 @@ impl BlockchainDbMeta {
     pub fn with_block<T: TransactionResponse, H: BlockHeader>(
         mut self,
         block: &alloy_rpc_types::Block<T, H>,
+        chain_id: u64,
     ) -> Self {
         let blob_base_fee_update_fraction =
             self.chain.map_or(BLOB_BASE_FEE_UPDATE_FRACTION_PRAGUE, |chain| {
@@ -164,7 +165,7 @@ impl BlockchainDbMeta {
 
         self.block_env = BlockEnv {
             number: U256::from(block.header.number()),
-            beneficiary: block.header.beneficiary(),
+            beneficiary: ChainAddress(chain_id, block.header.beneficiary()),
             timestamp: U256::from(block.header.timestamp()),
             difficulty: U256::from(block.header.difficulty()),
             basefee: block.header.base_fee_per_gas().unwrap_or_default(),
