@@ -188,6 +188,7 @@ where
         rx: UnboundedReceiver<BackendRequest>,
         block_id: Option<BlockId>,
     ) -> Self {
+        println!("BackendHandler::new: {:?}", block_id);
         Self {
             provider,
             db,
@@ -245,6 +246,7 @@ where
                 }
             }
             BackendRequest::SetPinnedBlock(block_id) => {
+                println!("SetPinnedBlock: {:?}", block_id);
                 self.block_id = Some(block_id);
             }
             BackendRequest::UpdateAddress(address_data) => {
@@ -280,6 +282,11 @@ where
                 let provider = self.provider.clone();
                 let block_id = self.block_id.unwrap_or_default();
                 let fut = Box::pin(async move {
+                    let _result: std::result::Result<bool, eyre::Report> = provider
+                        .client()
+                        .request("eth_setActiveChainId", (1,))
+                        .await
+                        .map_err(Into::into);
                     let storage = provider
                         .get_storage_at(address, idx)
                         .block_id(block_id)
@@ -300,6 +307,8 @@ where
         let block_id = self.block_id.unwrap_or_default();
         let mode = Arc::clone(&self.account_fetch_mode);
         let fut = async move {
+            let _result: std::result::Result<bool, eyre::Report> =
+                provider.client().request("eth_setActiveChainId", (1,)).await.map_err(Into::into);
             // depending on the tracked mode we can dispatch requests.
             let initial_mode = mode.load(Ordering::Relaxed);
             match initial_mode {
@@ -408,6 +417,8 @@ where
     fn request_full_block(&mut self, number: BlockId, sender: FullBlockSender) {
         let provider = self.provider.clone();
         let fut = Box::pin(async move {
+            let _result: std::result::Result<bool, eyre::Report> =
+                provider.client().request("eth_setActiveChainId", (1,)).await.map_err(Into::into);
             let block = provider
                 .get_block(number)
                 .full()
@@ -423,6 +434,8 @@ where
     fn request_transaction(&mut self, tx: B256, sender: TransactionSender) {
         let provider = self.provider.clone();
         let fut = Box::pin(async move {
+            let _result: std::result::Result<bool, eyre::Report> =
+                provider.client().request("eth_setActiveChainId", (1,)).await.map_err(Into::into);
             let block = provider
                 .get_transaction_by_hash(tx)
                 .await
@@ -447,6 +460,11 @@ where
                 entry.insert(vec![listener]);
                 let provider = self.provider.clone();
                 let fut = Box::pin(async move {
+                    let _result: std::result::Result<bool, eyre::Report> = provider
+                        .client()
+                        .request("eth_setActiveChainId", (1,))
+                        .await
+                        .map_err(Into::into);
                     let block = provider
                         .get_block_by_number(number.into())
                         .hashes()
@@ -743,6 +761,7 @@ impl SharedBackend {
     where
         P: Provider<AnyNetwork> + Unpin + 'static + Clone,
     {
+        println!("spawn_backend");
         let (shared, handler) = Self::new(provider, db, pin_block);
         // spawn the provider handler to a task
         trace!(target: "backendhandler", "spawning Backendhandler task");
@@ -760,6 +779,7 @@ impl SharedBackend {
     where
         P: Provider<AnyNetwork> + Unpin + 'static + Clone,
     {
+        println!("spawn_backend_thread");
         let (shared, handler) = Self::new(provider, db, pin_block);
 
         // spawn a light-weight thread with a thread-local async runtime just for
@@ -789,6 +809,7 @@ impl SharedBackend {
     where
         P: Provider<AnyNetwork> + Unpin + 'static + Clone,
     {
+        println!("SharedBackend::new: {:?}", pin_block);
         let (backend, backend_rx) = unbounded();
         let cache = Arc::new(FlushJsonBlockCacheDB(Arc::clone(db.cache())));
         let handler = BackendHandler::new(provider, db, backend_rx, pin_block);
